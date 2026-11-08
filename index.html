@@ -119,6 +119,10 @@
     .list-wrap { border-top:1px solid var(--line); }
     .list-head,.proxy-row { display:grid; grid-template-columns:minmax(0,1.6fr) .7fr .7fr .8fr auto; align-items:center; gap:18px; }
     .list-head { padding:13px 17px; color:#69727e; font-size:8px; font-weight:800; letter-spacing:.15em; text-transform:uppercase; }
+    .list-head [data-sort] { cursor:pointer; user-select:none; transition:color .2s; }
+    .list-head [data-sort]:hover, .list-head [data-sort].active { color:var(--mint); }
+    .section-note.sortable-note { cursor:pointer; user-select:none; transition:color .2s; }
+    .section-note.sortable-note:hover { color:var(--mint); }
     .proxy-row { min-height:76px; padding:14px 17px; border-top:1px solid var(--line-soft); transition:background .2s; }
     .proxy-row:hover { background:rgba(255,255,255,.025); }
     .proxy-name { display:flex; align-items:center; gap:13px; min-width:0; }
@@ -291,10 +295,10 @@
       <section id="list" class="reveal" style="margin-top:43px">
         <div class="section-head">
           <div><div class="section-kicker">Live selection</div><h2>Другие прокси</h2></div>
-          <div class="section-note">Список отсортирован по качеству</div>
+          <div class="section-note sortable-note" id="sortNote" title="Изменить сортировку">Список отсортирован по качеству</div>
         </div>
         <div class="list-wrap">
-          <div class="list-head"><span>Сервер</span><span>Задержка</span><span>Оценка</span><span>Проверка</span><span></span></div>
+          <div class="list-head" id="sortHead"><span data-sort="server" data-label="Сервер" tabindex="0" role="button" aria-label="Сортировать по имени сервера">Сервер</span><span data-sort="ping" data-label="Задержка" tabindex="0" role="button" aria-label="Сортировать по задержке">Задержка</span><span data-sort="score" data-label="Оценка" tabindex="0" role="button" aria-label="Сортировать по оценке">Оценка</span><span data-sort="checked" data-label="Проверка" tabindex="0" role="button" aria-label="Сортировать по свежести проверки">Проверка</span><span></span></div>
           <div id="proxyList"></div>
         </div>
       </section>
@@ -342,6 +346,61 @@
       return hours <= 24 ? ["Актуален",""] : hours <= 96 ? ["Недавно","warn"] : ["Старый","old"];
     };
     const connectUrl = p => p.link;
+    // ——— Сортировка списка ———
+    const SORT_DEFAULTS = { quality:-1, ping:1, score:-1, checked:-1, server:1 }; // dir: 1 = по возрастанию, -1 = по убыванию
+    const SORT_CYCLE = ["quality", "ping", "score", "checked", "server"];
+    const SORT_NOTES = {
+      quality: () => "Список отсортирован по качеству",
+      ping:    d => d === 1 ? "Сортировка: по задержке ↑ (быстрее сверху)" : "Сортировка: по задержке ↓",
+      score:   d => d === -1 ? "Сортировка: по оценке ↓ (лучше сверху)" : "Сортировка: по оценке ↑",
+      checked: d => d === -1 ? "Сортировка: по свежести ↓ (новые сверху)" : "Сортировка: по свежести ↑",
+      server:  d => d === 1 ? "Сортировка: по имени сервера (A→Z)" : "Сортировка: по имени сервера (Z→A)"
+    };
+    let baseItems = null;
+    let sortState = { mode: "quality", dir: -1 };
+    let currentDemo = false;
+    function sortComparator() {
+      const dir = sortState.mode === "quality" ? -1 : sortState.dir;
+      const by = {
+        quality: (a, b) => a.score - b.score || a.ping_ms - b.ping_ms || b.checkedDate - a.checkedDate,
+        ping:    (a, b) => a.ping_ms - b.ping_ms || a.score - b.score,
+        score:   (a, b) => a.score - b.score || a.ping_ms - b.ping_ms,
+        checked: (a, b) => a.checkedDate - b.checkedDate,
+        server:  (a, b) => String(hostLabel(a)).localeCompare(String(hostLabel(b)), "ru", { numeric:true, sensitivity:"base" })
+      }[sortState.mode];
+      return (x, y) => dir * by(x, y);
+    }
+    function setSort(mode, dir) {
+      sortState = { mode, dir };
+      renderList();
+      updateSortUI();
+    }
+    function updateSortUI() {
+      const dir = sortState.mode === "quality" ? -1 : sortState.dir;
+      document.querySelectorAll("#sortHead [data-sort]").forEach(el => {
+        const active = sortState.mode === el.dataset.sort || (sortState.mode === "quality" && el.dataset.sort === "score");
+        el.classList.toggle("active", active);
+        el.setAttribute("aria-sort", active ? (dir === 1 ? "ascending" : "descending") : "none");
+        el.textContent = el.dataset.label + (active ? (dir === 1 ? " ↑" : " ↓") : "");
+      });
+      $("sortNote").textContent = SORT_NOTES[sortState.mode](dir);
+    }
+    function renderList() {
+      if (!Array.isArray(baseItems) || !baseItems.length) return;
+      const best = baseItems[0];
+      const rest = baseItems.filter(p => p !== best);
+      const list = [...rest].sort(sortComparator());
+      $("proxyList").innerHTML = list.map(p => {
+        const f = freshness(p.checkedDate);
+        return `<div class="proxy-row">
+          <div class="proxy-name"><div class="country-mark">◎</div><div style="min-width:0"><div class="host">${esc(hostLabel(p))}</div><div class="host-sub">${esc(p.country || "Global")} · ${typeLabel(p)}</div></div></div>
+          <div class="cell">${esc(p.ping_ms)} ms<small>${p.type === "web" ? "tunnel" : "ping"}</small></div>
+          <div class="cell">${scoreText(p.score)}<small>quality</small></div>
+          <div class="cell"><span class="fresh ${f[1]}">${esc(ageLabel(p.checkedDate))}</span></div>
+          ${currentDemo ? '<span class="row-action disabled" aria-label="Демо">↗</span>' : `<a class="row-action" href="${esc(connectUrl(p))}" aria-label="Подключиться к ${esc(p.server)}">↗</a>`}
+        </div>`;
+      }).join("") || '<div class="empty">Пока это единственный актуальный прокси.</div>';
+    }
     function toast(message) {
       $("toast").textContent = message; $("toast").classList.add("show");
       setTimeout(() => $("toast").classList.remove("show"), 2400);
@@ -421,16 +480,10 @@
             ${button}
           </div>
         </article>`;
-      $("proxyList").innerHTML = items.slice(1).map(p => {
-        const f = freshness(p.checkedDate);
-        return `<div class="proxy-row">
-          <div class="proxy-name"><div class="country-mark">◎</div><div style="min-width:0"><div class="host">${esc(hostLabel(p))}</div><div class="host-sub">${esc(p.country || "Global")} · ${typeLabel(p)}</div></div></div>
-          <div class="cell">${esc(p.ping_ms)} ms<small>${p.type === "web" ? "tunnel" : "ping"}</small></div>
-          <div class="cell">${scoreText(p.score)}<small>quality</small></div>
-          <div class="cell"><span class="fresh ${f[1]}">${esc(ageLabel(p.checkedDate))}</span></div>
-          ${demo ? '<span class="row-action disabled" aria-label="Демо">↗</span>' : `<a class="row-action" href="${esc(connectUrl(p))}" aria-label="Подключиться к ${esc(p.server)}">↗</a>`}
-        </div>`;
-      }).join("") || '<div class="empty">Пока это единственный актуальный прокси.</div>';
+      baseItems = items;
+      currentDemo = demo;
+      renderList();
+      updateSortUI();
     }
     async function init() {
       try {
@@ -444,6 +497,21 @@
       }
     }
     init();
+    // ——— Обработчики сортировки ———
+    document.querySelectorAll("#sortHead [data-sort]").forEach(el => {
+      const apply = () => {
+        const mode = el.dataset.sort;
+        setSort(mode, sortState.mode === mode ? -sortState.dir : SORT_DEFAULTS[mode]);
+      };
+      el.addEventListener("click", apply);
+      el.addEventListener("keydown", ev => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); apply(); }
+      });
+    });
+    $("sortNote").addEventListener("click", () => {
+      const next = SORT_CYCLE[(SORT_CYCLE.indexOf(sortState.mode) + 1) % SORT_CYCLE.length];
+      setSort(next, SORT_DEFAULTS[next]);
+    });
     const revealObserver = new IntersectionObserver(entries => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
