@@ -120,10 +120,10 @@
     .score strong { display:block; color:var(--mint); font-size:35px; font-weight:700; letter-spacing:-.07em; }
     .score span { color:#84918f; font-size:8px; font-weight:700; letter-spacing:.15em; text-transform:uppercase; }
     .connect {
-      display:inline-flex; align-items:center; justify-content:center; gap:9px; min-width:148px;
-      padding:13px 17px; border:0; border-radius:13px; color:#06140f;
+      display:inline-flex; align-items:center; justify-content:center; gap:10px; min-width:180px;
+      padding:16px 24px; border:0; border-radius:15px; color:#06140f;
       background:linear-gradient(135deg,#75f5c6,#2bd99f); box-shadow:0 9px 28px rgba(47,230,168,.18),inset 0 1px 0 rgba(255,255,255,.65);
-      font-size:10px; font-weight:800; text-decoration:none; transition:transform .2s,filter .2s,box-shadow .2s;
+      font-size:12px; font-weight:800; text-decoration:none; transition:transform .2s,filter .2s,box-shadow .2s;
       cursor:pointer;
     }
     .connect:hover { transform:translateY(-2px); filter:brightness(1.06); box-shadow:0 13px 34px rgba(47,230,168,.25); }
@@ -195,13 +195,22 @@
       .score { text-align:left; }
       .score strong { font-size:27px; }
       .list-head { display:none; }
-      .proxy-row { grid-template-columns:minmax(0,1fr) auto; gap:9px 14px; padding:15px 10px; }
-      .proxy-name { grid-column:1; }
-      .proxy-row .cell { grid-row:2; font-size:9px; }
+      .proxy-row {
+        grid-template-columns:repeat(3, minmax(0,1fr)) auto;
+        grid-template-areas:
+          "name name name action"
+          "ping score checked action";
+        gap:10px 12px; padding:15px 10px;
+      }
+      .proxy-name { grid-area:name; }
+      .proxy-row .cell { font-size:9px; }
+      .proxy-row .cell:nth-of-type(2) { grid-area:ping; }
+      .proxy-row .cell:nth-of-type(3) { grid-area:score; }
+      .proxy-row .cell:nth-of-type(4) { grid-area:checked; }
       .proxy-row .cell:nth-of-type(2)::before { content:"PING "; color:#69727e; font-size:8px; }
       .proxy-row .cell:nth-of-type(3)::before { content:"SCORE "; color:#69727e; font-size:8px; }
-      .proxy-row .cell:nth-of-type(4) { display:none; }
-      .row-action { grid-column:2; grid-row:1 / span 2; }
+      .proxy-row .cell:nth-of-type(4)::before { content:"ПРОВЕРКА"; display:block; margin-bottom:4px; color:#69727e; font-size:8px; }
+      .row-action { grid-area:action; align-self:center; width:46px; height:46px; font-size:17px; border-radius:14px; }
       .section-head { align-items:start; flex-direction:column; gap:7px; }
       footer { flex-direction:column; }
       footer span:last-child { text-align:left; }
@@ -213,7 +222,7 @@
       h1 { font-size:44px; }
       .metrics { gap:20px; }
       .metric-value { font-size:15px; }
-      .connect { min-width:132px; padding:12px; }
+      .connect { min-width:160px; padding:15px 18px; }
     }
 
     /* Smooth ambient light instead of the old grain/pixel overlay */
